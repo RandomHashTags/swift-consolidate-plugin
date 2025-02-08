@@ -51,9 +51,8 @@ struct SwiftConsolidatePlugin : CommandPlugin {
                 }
             }
         }
-        if fileManager.createFile(atPath: settings.outputFile, contents: consolidatedData) {
-            print("Wrote \(consolidatedData.count) bytes to " + settings.outputFile)
-        }
+        try consolidatedData.write(to: URL(fileURLWithPath: settings.outputFile))
+        print("Wrote \(consolidatedData.count) bytes to " + settings.outputFile)
     }
     func folder(
         path: String,
