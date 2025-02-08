@@ -10,11 +10,41 @@ Consolidate files that match a predicate into a single file.
 
 <summary>embedded</summary>
 
+Whether or not to strip imports, unnecessary whitespace and code annotated to not work for embedded.
+
 </details>
 
 <details>
 
 <summary>recursive</summary>
+
+Whether or not to search directories location in the source directory contents.
+
+</details>
+
+<details>
+
+<summary>production</summary>
+
+Whether or not to strip all unnecessary whitespace, including comments and code blocks, leaving just the bare minimum code required to use the code.
+
+</details>
+
+<details>
+
+<summary>exclude</summary>
+
+Whether or not to exclude directories/files when consolidating.
+
+- Usage: `--exclude <comma separated list of directories/files, relative to the package directory path>`
+
+</details>
+
+<details>
+
+<summary>output</summary>
+
+The output file where the consolidated data gets written to, relative to the package directory path.
 
 </details>
 
@@ -22,4 +52,4 @@ Consolidate files that match a predicate into a single file.
 
 Executing the following command will merge all Swift files contained in the given directory while removing imports and unnecessary whitespace, making it suitable for easy linking when building for embedded.
 
-- `swift package plugin consolidate <directoryName> --embedded --recursive <outputFileName>`
+- `swift package plugin consolidate <sourceDirectory> --embedded --recursive --output <outputFilePath>`
