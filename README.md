@@ -37,7 +37,7 @@ What programming languages you want to consolidate.
   - Swift
   - Rust
 
-<details>
+</details>
 
 <summary>production</summary>
 
