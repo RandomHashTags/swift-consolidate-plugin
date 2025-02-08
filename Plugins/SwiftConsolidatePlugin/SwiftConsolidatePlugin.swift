@@ -35,23 +35,21 @@ struct SwiftConsolidatePlugin : CommandPlugin {
         
         let fileManager:FileManager = FileManager.default
         let sourcesFolder:Path = context.package.directory.appending([directory])
-        let modules = try fileManager.contentsOfDirectory(atPath: sourcesFolder.string)
+        var filePaths:[String] = []
+        try folder(path: sourcesFolder.string, settings: settings, filePaths: &filePaths)
         var consolidatedData:Data = Data()
-        for module in modules {
-            var filePaths:[String] = []
-            let modulePath:Path = sourcesFolder.appending([module])
-            try folder(path: modulePath.string, settings: settings, filePaths: &filePaths)
-            var allCode:String = ""
-            for filePath in filePaths {
-                if let data:Data = fileManager.contents(atPath: filePath), var code:String = String(data: data, encoding: .utf8) {
-                    for accessControlImport in ["@_exported ", "@_implementationOnly ", "public ", "package ", "internal ", "private ", "fileprivate ", ""] {
-                        try code.replace(Regex("(" + accessControlImport + "import [a-zA-Z_]+\\s*)"), with: "") // remove imports
-                    }
-                    try code.replace(Regex("(//\n)"), with: "") // remove empty comments
-                    allCode += "\n" + code
+        for filePath in filePaths {
+            if let data:Data = fileManager.contents(atPath: filePath), var code:String = String(data: data, encoding: .utf8) {
+                for accessControlImport in ["@_exported ", "@_implementationOnly ", "public ", "package ", "internal ", "private ", "fileprivate ", ""] {
+                    try code.replace(Regex("(" + accessControlImport + "import [a-zA-Z_]+\\s*)"), with: "") // remove imports
+                }
+                try code.replace(Regex("(//\n)"), with: "") // remove empty comments
+                
+                if var stripped:Data = code.data(using: .utf8) {
+                    consolidatedData.append(contentsOf: [10]) // \n
+                    consolidatedData.append(contentsOf: stripped)
                 }
             }
-            consolidatedData.append(contentsOf: [UInt8](allCode.utf8))
         }
         if fileManager.createFile(atPath: settings.outputFile, contents: consolidatedData) {
             print("Wrote \(consolidatedData.count) bytes to " + settings.outputFile)
