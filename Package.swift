@@ -13,10 +13,15 @@ let package = Package(
     targets: [
         .plugin(
             name: "SwiftConsolidatePlugin",
-            capability: .command(intent: .custom(
-                verb: "consolidate",
-                description: "Consolidates multiple files that match a predicate into a single file."
-            ))
+            capability: .command(
+                intent: .custom(
+                    verb: "consolidate",
+                    description: "Consolidates multiple files that match a predicate into a single file."
+                ),
+                permissions: [
+                    .writeToPackageDirectory(reason: "Write consolidated output data to a single file.")
+                ]
+            )
         )
     ]
 )
