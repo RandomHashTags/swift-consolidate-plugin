@@ -16,11 +16,26 @@ Whether or not to strip imports, unnecessary whitespace and code annotated to no
 
 <details>
 
-<summary>recursive</summary>
+<summary>exclude</summary>
 
-Whether or not to search directories location in the source directory contents.
+Whether or not to exclude directories/files when consolidating.
+
+- Usage: `--exclude <comma separated list of directories/files, relative to the package directory path>`
 
 </details>
+
+<details>
+
+<summary>lang</summary>
+
+What programming languages you want to consolidate.
+
+- Usage: `--lang <comma separated list of a supported programming language name>`
+
+- Supported Programming Languages
+  - C
+  - Swift
+  - Rust
 
 <details>
 
@@ -32,11 +47,9 @@ Whether or not to strip all unnecessary whitespace, including comments and code 
 
 <details>
 
-<summary>exclude</summary>
+<summary>recursive</summary>
 
-Whether or not to exclude directories/files when consolidating.
-
-- Usage: `--exclude <comma separated list of directories/files, relative to the package directory path>`
+Whether or not to search directories location in the source directory contents.
 
 </details>
 

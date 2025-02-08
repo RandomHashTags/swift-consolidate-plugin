@@ -22,7 +22,7 @@ struct SwiftConsolidatePlugin : CommandPlugin {
         var consolidatedData:Data = Data()
         
         var removeRegex:Set<String> = []
-        var replaceRegex:[String:String] = [:]
+        var replaceRegex:[(String, String)] = []
         if settings.embedded {
             // remove imports
             for accessControlImport in ["@_exported ", "@_implementationOnly ", "public ", "package ", "internal ", "private ", "fileprivate ", ""] {
@@ -32,10 +32,16 @@ struct SwiftConsolidatePlugin : CommandPlugin {
         if settings.forProduction {
             loadProductionRegex(lang: "swift", remove: &removeRegex, replace: &replaceRegex)
         }
-        let processEmbeddedLogic:(inout String) throws -> Void = processEmbedded(lang: "swift")
         for filePath in filePaths {
             if let data:Data = fileManager.contents(atPath: filePath), var code:String = String(data: data, encoding: .utf8) {
-                try processEmbeddedLogic(&code)
+                if let fileExtension:Substring = filePath.split(separator: ".").last {
+                    if settings.forProduction {
+                        try processProduction(fileExtension: fileExtension, string: &code)
+                    }
+                    if settings.embedded {
+                        try processEmbedded(fileExtension: fileExtension, string: &code)
+                    }
+                }
                 for regex in removeRegex {
                     try code.replace(Regex("(" + regex + ")"), with: "")
                 }
@@ -55,6 +61,41 @@ struct SwiftConsolidatePlugin : CommandPlugin {
         print("Wrote \(consolidatedData.count) bytes to " + settings.outputFile)
     }
     
+    func folder(
+        absolutePath: String,
+        settings: borrowing ConsolidationSettings,
+        relativePath: inout String,
+        filePaths: inout [String]
+    ) throws {
+        let contents:[String] = try FileManager.default.contentsOfDirectory(atPath: absolutePath)
+        for file in contents {
+            let filePath:String = absolutePath + "/" + file
+            var isDirectory:ObjCBool = false
+            if FileManager.default.fileExists(atPath: filePath, isDirectory: &isDirectory) {
+                if isDirectory.boolValue {
+                    var relativeDirectoryPath:String = relativePath
+                    relativeDirectoryPath += file
+                    if !settings.excluded.contains(relativeDirectoryPath) && settings.recursive {
+                        relativePath += "/"
+                        try folder(absolutePath: filePath, settings: settings, relativePath: &relativeDirectoryPath, filePaths: &filePaths)
+                    }
+                } else {
+                    if !settings.excluded.contains(relativePath + "/" + file) {
+                        for suffix in settings.suffixes {
+                            if filePath.hasSuffix(suffix) {
+                                filePaths.append(filePath)
+                                break
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: Load Settings
+extension SwiftConsolidatePlugin {
     func loadSettings(context: PluginContext, args: inout [String]) throws -> ConsolidationSettings {
         guard let directory:String = args.first else {
             throw ArgumentError.missingSourceDirectory
@@ -115,48 +156,16 @@ struct SwiftConsolidatePlugin : CommandPlugin {
             forProduction: forProduction
         )
     }
-    
-    func folder(
-        absolutePath: String,
-        settings: borrowing ConsolidationSettings,
-        relativePath: inout String,
-        filePaths: inout [String]
-    ) throws {
-        let contents:[String] = try FileManager.default.contentsOfDirectory(atPath: absolutePath)
-        for file in contents {
-            let filePath:String = absolutePath + "/" + file
-            var isDirectory:ObjCBool = false
-            if FileManager.default.fileExists(atPath: filePath, isDirectory: &isDirectory) {
-                if isDirectory.boolValue {
-                    var relativeDirectoryPath:String = relativePath
-                    relativeDirectoryPath += file
-                    if !settings.excluded.contains(relativeDirectoryPath) && settings.recursive {
-                        relativePath += "/"
-                        try folder(absolutePath: filePath, settings: settings, relativePath: &relativeDirectoryPath, filePaths: &filePaths)
-                    }
-                } else {
-                    if !settings.excluded.contains(relativePath + "/" + file) {
-                        for suffix in settings.suffixes {
-                            if filePath.hasSuffix(suffix) {
-                                filePaths.append(filePath)
-                                break
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 // MARK: Lang Source Code File Extension
 extension SwiftConsolidatePlugin {
     func fileExtension(forLang lang: String) -> String? {
         switch lang {
-        case "c", "swift":
+        case "swift":
             return lang
-        case "rust":
-            return "rs"
+        //case "rust":
+        //    return "rs"
         default: return nil
         }
     }
@@ -164,7 +173,7 @@ extension SwiftConsolidatePlugin {
 
 // MARK: Production Regex
 extension SwiftConsolidatePlugin {
-    func loadProductionRegex(lang: String, remove: inout Set<String>, replace: inout [String:String]) {
+    func loadProductionRegex(lang: String, remove: inout Set<String>, replace: inout [(String,String)]) {
         switch lang {
         case "swift": loadSwiftProductionRegex(remove: &remove, replace: &replace)
         default: break
@@ -174,65 +183,160 @@ extension SwiftConsolidatePlugin {
 
 // MARK: Swift Production Regex
 extension SwiftConsolidatePlugin {
-    func loadSwiftProductionRegex(remove: inout Set<String>, replace: inout [String:String]) {
+    func loadSwiftProductionRegex(remove: inout Set<String>, replace: inout [(String, String)]) {
         // remove documentation
         remove.insert("\\/\\/\\/.+\\s")
+        
         // remove comments
         remove.insert("\\/\\/.+\\s")
         
+        // remove whitespace at the beginning of a line
+        remove.insert("^\\s+")
+        
         // replace whitespace for bitwise operations
-        replace["\\s+\\|=\\s+"] = "|="
-        replace["\\s+>>=\\s+"] = ">>="
-        replace["\\s+>>\\s+"] = ">>"
-        replace["\\s+<<=\\s+"] = "<<="
-        replace["\\s+<<\\s+"] = "<<"
-        replace["\\s+&\\s+"] = "&"
-        replace["\\s+\\|\\s+"] = "|"
+        replace.append(("\\s+\\|=\\s+", "|="))
+        replace.append(("\\s+>>=\\s+", ">>="))
+        replace.append(("\\s+>>\\s+", ">>"))
+        replace.append(("\\s+<<=\\s+", "<<="))
+        replace.append(("\\s+<<\\s+", "<<"))
+        replace.append(("\\s+&\\s+", "&"))
+        replace.append(("\\s+\\|\\s+", "|"))
         
         // replace whitespace for equal declarations
-        replace["\\s+\\+=\\s+"] = "+="
-        replace["\\s+\\-=\\s+"] = "-="
-        replace["\\s+\\*=\\s+"] = "*="
-        replace["\\s+\\/=\\s+"] = "/="
+        replace.append(("\\s+\\+=\\s+", "+="))
+        replace.append(("\\s+\\-=\\s+", "-="))
+        replace.append(("\\s+\\*=\\s+", "*="))
+        replace.append(("\\s+\\/=\\s+", "/="))
         
-        // replace whitespace for standard lib annotations
-        replace["@inlinable\\s+"] = "@inlinable "
-        replace["@usableFromInline\\s+"] = "@usableFromInline "
+        // replace whitespace for standard lib attributes
+        let attributes:Set<String> = [
+            "discardableResult",
+            "dynamicCallable",
+            "dynamicMemberLookup",
+            "frozen",
+            "GKInspectable",
+            "inlinable",
+            "main",
+            "MainActor",
+            "nonobjc",
+            "NSApplicationMain",
+            "NSCopying",
+            "NSManaged",
+            "objc",
+            "objcMembers",
+            "preconcurrency",
+            "propertyWrapper",
+            "resultBuilder",
+            "requires_stored_property_inits",
+            "testable",
+            "UIApplicationMain",
+            "unchecked",
+            "usableFromInline",
+            "warn_unqualified_access",
+            
+            "autoclosure",
+            "Sendable",
+            
+            "unknown",
+            
+            "transparent",
+            "unsafe_no_objc_tagged_pointer",
+            "silgen_name",
+        ]
+        for attr in attributes {
+            replace.append(("@_" + attr + "\\s+", "@_" + attr + " "))
+            replace.append(("\\s+@_" + attr + "\\s+", ";@_" + attr + " "))
+            replace.append(("@" + attr + "\\s+", "@" + attr + " "))
+            replace.append(("\\s+@" + attr + "\\s+", ";@" + attr + " "))
+        }
         
         // replace whitespace for conditions
-        replace["\\s+===\\s+"] = "==="
-        replace["\\s+==\\s+"] = "=="
+        replace.append(("\\s+===\\s+", "==="))
+        replace.append(("\\s+==\\s+", "=="))
+        
+        // replace whitespace for opening bracket
+        replace.append(("\\s+{\\s+", "{"))
+        
+        // replace whitespace for closing bracket
+        replace.append(("\\s+}", "}"))
         
         // replace whitespace for guard else
-        replace["\\s+else\\s+{\\s+return nil\\s+}"] = "else{return nil}"
-        replace["\\s+else\\s+{\\s+return\\s+}"] = "else{return}"
+        replace.append(("\\s+else\\s+{\\s+return nil\\s+}", "else{return nil}"))
+        replace.append(("\\s+else\\s+{\\s+return\\s+}", "else{return}"))
         
         // replace whitespace for defer
-        replace["defer\\s+{\\s+"] = "defer{"
+        replace.append(("defer\\s+", "defer"))
+        replace.append(("\\s+defer", ";defer"))
         
         // replace whitespace for break
-        replace["{\\s+break\\s+}"] = "{break}"
+        //replace["{\\s+break\\s+}"] = "{break}"
         
-        // replace default whitespace
-        replace["\\s*+default\\s*+:\\s*+"] = ";default:"
+        // replace whitespace for default keyword
+        replace.append(("\\s*+default\\s*+:\\s*+", ";default:"))
         
-        // replace return nil whitespace
-        replace[":\\s+return nil"] = ":return nil"
+        // replace whitespace for inout
+        replace.append(("inout\\s+", "inout "))
         
-        // replace case whitespace
-        replace["case\\s+\\."] = "case."
+        // replace whitespace for return
+        replace.append((":\\s+return nil", ":return nil"))
+        replace.append(("{\\s+return\\s+", "{"))
+        replace.append(("\\s+return", ";return"))
         
-        // replace colon whitespace
-        replace["\\s*+:\\s*+"] = ":"
+        // replace whitespace for switch keyword
+        replace.append(("\\s+switch\\s+", ";switch "))
+        
+        // replace whitespace for case keyword
+        replace.append(("{\\s+case\\s*+", "{case"))
+        replace.append(("case\\s+\\.", "case."))
+        replace.append(("\\)\\s+case", ");case"))
+        replace.append((#"\s\s+case"#, ";case"))
+        
+        // replace whitespace for colon
+        replace.append(("\\s*+:\\s*+", ":"))
+        
+        // replace whitespace for comma
+        replace.append((",\\s+", ","))
+        
+        // replace whitespace for line feed
+        //replace["\n\\s*+"] = ";"
+        
+        // correct false positives
+        replace.append(("{;", "{"))
+        replace.append((":;", ":"))
+    }
+}
+
+// MARK: Process Production
+extension SwiftConsolidatePlugin {
+    func processProduction<T: StringProtocol>(fileExtension: T, string: inout String) throws {
+        switch fileExtension {
+        case "swift": try processSwiftProduction(&string)
+        default: break
+        }
+    }
+}
+
+// MARK: Process Swift Production
+extension SwiftConsolidatePlugin {
+    func processSwiftProduction(_ string: inout String) throws {
+        /*let annotations:Regex = try Regex("@[a-zA-Z0-9_]+\\s+")
+        while let match = string.firstMatch(of: annotations) {
+            var substring:Substring = string[match.range]
+            while substring.last?.isWhitespace ?? false {
+                substring.removeLast()
+            }
+            substring.append(" ")
+            string.replaceSubrange(match.range, with: substring)
+        }*/
     }
 }
 
 // MARK: Process Embedded
 extension SwiftConsolidatePlugin {
-    func processEmbedded(lang: String) -> (inout String) throws -> Void {
-        switch lang {
-        case "swift": return processSwiftEmbedded
-        default: return { _ in }
+    func processEmbedded<T: StringProtocol>(fileExtension: T, string: inout String) throws {
+        switch fileExtension {
+        case "swift": try processSwiftEmbedded(&string)
+        default: break
         }
     }
 }
