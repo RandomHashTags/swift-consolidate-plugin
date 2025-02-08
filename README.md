@@ -39,6 +39,8 @@ What programming languages you want to consolidate.
 
 </details>
 
+<details>
+
 <summary>production</summary>
 
 Whether or not to strip all unnecessary whitespace, including comments and code blocks, leaving just the bare minimum code required to use the code.
