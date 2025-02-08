@@ -4,13 +4,15 @@ Consolidate files that match a predicate into a single file.
 
 ## Usage
 
+The arguments can be declared in any order, and you can mix and match them (embedded + production outputs a file suitable only for production usage on an embedded device).
+
 ### Arguments
 
 <details>
 
 <summary>embedded</summary>
 
-Whether or not to strip imports, unnecessary whitespace and code annotated to not work for embedded.
+Strips imports, unnecessary whitespace (preserving comments and documentation) and code annotated to not work for embedded.
 
 </details>
 
@@ -18,7 +20,7 @@ Whether or not to strip imports, unnecessary whitespace and code annotated to no
 
 <summary>exclude</summary>
 
-Whether or not to exclude directories/files when consolidating.
+Exclude directories/files when consolidating.
 
 - Usage: `--exclude <comma separated list of directories/files, relative to the package directory path>`
 
@@ -33,9 +35,9 @@ What programming languages you want to consolidate.
 - Usage: `--lang <comma separated list of a supported programming language name>`
 
 - Supported Programming Languages
-  - C
+  - C (coming soon)
   - Swift
-  - Rust
+  - Rust (coming soon)
 
 </details>
 
@@ -43,7 +45,7 @@ What programming languages you want to consolidate.
 
 <summary>production</summary>
 
-Whether or not to strip all unnecessary whitespace, including comments and code blocks, leaving just the bare minimum code required to use the code.
+Lossless compression that strips all unnecessary whitespace, including comments and documentation, leaving just the bare minimum required to use the code.
 
 </details>
 
@@ -51,7 +53,7 @@ Whether or not to strip all unnecessary whitespace, including comments and code 
 
 <summary>recursive</summary>
 
-Whether or not to search directories location in the source directory contents.
+Searches all directory contents.
 
 </details>
 
@@ -59,7 +61,7 @@ Whether or not to search directories location in the source directory contents.
 
 <summary>output</summary>
 
-The output file where the consolidated data gets written to, relative to the package directory path.
+The single file output path where the consolidated data gets written to, relative to the package directory.
 
 </details>
 
@@ -67,4 +69,4 @@ The output file where the consolidated data gets written to, relative to the pac
 
 Executing the following command will merge all Swift files contained in the given directory while removing imports and unnecessary whitespace, making it suitable for easy linking when building for embedded.
 
-- `swift package plugin consolidate <sourceDirectory> --embedded --recursive --output <outputFilePath>`
+- `swift package plugin consolidate <sourceDirectory> --embedded --recursive --output <outputPath>`
