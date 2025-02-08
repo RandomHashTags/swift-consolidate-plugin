@@ -18,7 +18,7 @@ struct SwiftConsolidatePlugin : CommandPlugin {
         }
         args.removeFirst()
         guard let outputFile:String = args.last else {
-            print("Missing outpit file")
+            print("Missing output file")
             return
         }
         args.removeLast()
@@ -31,7 +31,7 @@ struct SwiftConsolidatePlugin : CommandPlugin {
             }
         }
         let writeDirectory:Path = context.package.directory.appending([outputFile])
-        let settings:ConsolidationSettings = ConsolidationSettings(outputFile: writeDirectory.string, embedded: isEmbedded, recursive: isRecursive)
+        let settings:ConsolidationSettings = ConsolidationSettings(outputFile: writeDirectory.string, suffixes: [".swift"], embedded: isEmbedded, recursive: isRecursive)
         
         let fileManager:FileManager = FileManager.default
         let sourcesFolder:Path = context.package.directory.appending([directory])
@@ -40,7 +40,7 @@ struct SwiftConsolidatePlugin : CommandPlugin {
         for module in modules {
             var filePaths:[String] = []
             let modulePath:Path = sourcesFolder.appending([module])
-            try folder(path: modulePath.string, suffixes: [".swift"], filePaths: &filePaths)
+            try folder(path: modulePath.string, settings: settings, filePaths: &filePaths)
             var allCode:String = ""
             for filePath in filePaths {
                 if let data:Data = fileManager.contents(atPath: filePath), var code:String = String(data: data, encoding: .utf8) {
@@ -53,8 +53,8 @@ struct SwiftConsolidatePlugin : CommandPlugin {
             }
             consolidatedData.append(contentsOf: [UInt8](allCode.utf8))
         }
-        if fileManager.createFile(atPath: settings.writeFile, contents: consolidatedData) {
-            print("Wrote \(consolidatedData.count) bytes to " + settings.writeFile)
+        if fileManager.createFile(atPath: settings.outputFile, contents: consolidatedData) {
+            print("Wrote \(consolidatedData.count) bytes to " + settings.outputFile)
         }
     }
     func folder(
@@ -62,7 +62,7 @@ struct SwiftConsolidatePlugin : CommandPlugin {
         settings: borrowing ConsolidationSettings,
         filePaths: inout [String]
     ) throws {
-        let contents:[String] = try fileManager.contentsOfDirectory(atPath: path)
+        let contents:[String] = try FileManager.default.contentsOfDirectory(atPath: path)
         for file in contents {
             let filePath:String = path + "/" + file
             var isDirectory:ObjCBool = false
