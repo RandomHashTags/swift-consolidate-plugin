@@ -45,7 +45,7 @@ What programming languages you want to consolidate.
 
 <summary>production</summary>
 
-Lossless compression that strips all unnecessary whitespace, including comments and documentation, leaving just the bare minimum required to use the code.
+Strips all redundant information and unnecessary whitespace, including comments and documentation, leaving just the bare minimum required to use the code.
 
 </details>
 

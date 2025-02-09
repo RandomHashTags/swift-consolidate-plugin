@@ -21,13 +21,10 @@ struct SwiftConsolidatePlugin : CommandPlugin {
         try folder(absolutePath: sourcesFolder.string, settings: settings, relativePath: &relativePath, filePaths: &filePaths)
         var consolidatedData:Data = Data()
         
-        var removeRegex:Set<String> = []
+        var removeRegex:[String] = []
         var replaceRegex:[(String, String)] = []
         if settings.embedded {
-            // remove imports
-            for accessControlImport in ["@_exported ", "@_implementationOnly ", "public ", "package ", "internal ", "private ", "fileprivate ", ""] {
-                removeRegex.insert(accessControlImport + "import [a-zA-Z_]+\\s*")
-            }
+            loadEmbeddedRegex(lang: "swift", remove: &removeRegex, replace: &replaceRegex)
         }
         if settings.forProduction {
             loadProductionRegex(lang: "swift", remove: &removeRegex, replace: &replaceRegex)
@@ -36,19 +33,40 @@ struct SwiftConsolidatePlugin : CommandPlugin {
             if let data:Data = fileManager.contents(atPath: filePath), var code:String = String(data: data, encoding: .utf8) {
                 if let fileExtension:Substring = filePath.split(separator: ".").last {
                     if settings.forProduction {
-                        try processProduction(fileExtension: fileExtension, string: &code)
+                        do {
+                            try processProduction(fileExtension: fileExtension, string: &code)
+                        } catch {
+                            print("encountered error while processing production:")
+                            throw error
+                        }
                     }
                     if settings.embedded {
-                        try processEmbedded(fileExtension: fileExtension, string: &code)
+                        do {
+                            try processEmbedded(fileExtension: fileExtension, string: &code)
+                        } catch {
+                            print("encountered error while processing embedded:")
+                            throw error
+                        }
                     }
                 }
                 for regex in removeRegex {
-                    try code.replace(Regex("(" + regex + ")"), with: "")
+                    do {
+                        try code.replace(Regex("(" + regex + ")"), with: "")
+                    } catch {
+                        print("encountered error while using remove regex \(regex):")
+                        throw error
+                    }
                 }
                 for (regex, replacement) in replaceRegex {
-                    try code.replace(Regex("(" + regex + ")"), with: replacement)
+                    do {
+                        try code.replace(Regex("(" + regex + ")"), with: replacement)
+                    } catch {
+                        print("encountered error while using replace regex \(regex):")
+                        throw error
+                    }
                 }
                 try code.replace(Regex("(//\n)"), with: "") // remove empty comments
+                try code.replace(Regex("(\\n\\s+)"), with: ";") // remove remaining unnecessary whitespace
                 
                 if var stripped:Data = code.data(using: .utf8) {
                     consolidatedData.append(contentsOf: [10]) // \n
@@ -173,7 +191,7 @@ extension SwiftConsolidatePlugin {
 
 // MARK: Production Regex
 extension SwiftConsolidatePlugin {
-    func loadProductionRegex(lang: String, remove: inout Set<String>, replace: inout [(String,String)]) {
+    func loadProductionRegex(lang: String, remove: inout [String], replace: inout [(String,String)]) {
         switch lang {
         case "swift": loadSwiftProductionRegex(remove: &remove, replace: &replace)
         default: break
@@ -183,15 +201,15 @@ extension SwiftConsolidatePlugin {
 
 // MARK: Swift Production Regex
 extension SwiftConsolidatePlugin {
-    func loadSwiftProductionRegex(remove: inout Set<String>, replace: inout [(String, String)]) {
+    func loadSwiftProductionRegex(remove: inout [String], replace: inout [(String, String)]) {
         // remove documentation
-        remove.insert("\\/\\/\\/.+\\s")
+        remove.append("\\/\\/\\/.+\\s")
         
         // remove comments
-        remove.insert("\\/\\/.+\\s")
+        remove.append("\\/\\/.+\\s")
         
         // remove whitespace at the beginning of a line
-        remove.insert("^\\s+")
+        remove.append("^\\s+")
         
         // replace whitespace for bitwise operations
         replace.append(("\\s+\\|=\\s+", "|="))
@@ -275,7 +293,7 @@ extension SwiftConsolidatePlugin {
         replace.append(("\\s*+default\\s*+:\\s*+", ";default:"))
         
         // replace whitespace for inout
-        replace.append(("inout\\s+", "inout "))
+        replace.append(("inout\\s+\\[", "inout["))
         
         // replace whitespace for return
         replace.append((":\\s+return nil", ":return nil"))
@@ -289,7 +307,8 @@ extension SwiftConsolidatePlugin {
         replace.append(("{\\s+case\\s*+", "{case"))
         replace.append(("case\\s+\\.", "case."))
         replace.append(("\\)\\s+case", ");case"))
-        replace.append((#"\s\s+case"#, ";case"))
+        replace.append(("\\s\\s+case", ";case"))
+        replace.append(("\\s+indirect\\s+case", ";indirect case"))
         
         // replace whitespace for colon
         replace.append(("\\s*+:\\s*+", ":"))
@@ -298,7 +317,7 @@ extension SwiftConsolidatePlugin {
         replace.append((",\\s+", ","))
         
         // replace whitespace for line feed
-        //replace["\n\\s*+"] = ";"
+        //replace.append(("\n\\s*", ";"))
         
         // correct false positives
         replace.append(("{;", "{"))
@@ -319,7 +338,7 @@ extension SwiftConsolidatePlugin {
 // MARK: Process Swift Production
 extension SwiftConsolidatePlugin {
     func processSwiftProduction(_ string: inout String) throws {
-        /*let annotations:Regex = try Regex("@[a-zA-Z0-9_]+\\s+")
+        /*let annotations:Regex = try Regex("@\\w+\\s+")
         while let match = string.firstMatch(of: annotations) {
             var substring:Substring = string[match.range]
             while substring.last?.isWhitespace ?? false {
@@ -328,6 +347,29 @@ extension SwiftConsolidatePlugin {
             substring.append(" ")
             string.replaceSubrange(match.range, with: substring)
         }*/
+        
+        // replace redundant type annotation
+        // TODO: ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    }
+}
+
+// MARK: Embedded Regex
+extension SwiftConsolidatePlugin {
+    func loadEmbeddedRegex(lang: String, remove: inout [String], replace: inout [(String, String)]) {
+        switch lang {
+        case "swift": loadSwiftEmbeddedRegex(remove: &remove, replace: &replace)
+        default: break
+        }
+    }
+}
+
+// MARK: Swift Embedded Regex
+extension SwiftConsolidatePlugin {
+    func loadSwiftEmbeddedRegex(remove: inout [String], replace: inout [(String, String)]) {
+        // TODO: remove !hasFeature(Embedded) compiler directive code block
+        // remove imports
+        let accessControlImportsRegex:String = "(" + ["@_exported\\s+", "@_implementationOnly\\s+", "public\\s+", "package\\s+", "internal\\s+", "private\\s+", "fileprivate\\s+", "\\s*"].joined(separator: "\\|") + ")?import\\s+\\w+\\s*"
+        remove.append(accessControlImportsRegex)
     }
 }
 
@@ -344,9 +386,7 @@ extension SwiftConsolidatePlugin {
 // MARK: Process Swift Embedded
 extension SwiftConsolidatePlugin {
     func processSwiftEmbedded(_ string: inout String) throws {
-        // TODO: remove compiler directives not available for embedded
-        
-        let indirectCase:Regex = try Regex("(\\s+indirect case [a-zA-Z0-9_]+)")
+        let indirectCase:Regex = try Regex("(\\s+indirect\\s+case\\s+\\w+)")
         //let caseRegex:Regex = try Regex("(\\s+case [a-zA-Z0-9_]+)")
         while let match = string.firstMatch(of: indirectCase)/* ?? string.firstMatch(of: caseRegex)*/ {
             var substring:Substring = string[match.range]
